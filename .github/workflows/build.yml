@@ -2,7 +2,9 @@ name: Gerar APK Android
 
 on:
   workflow_dispatch:
-  push:
+  push:    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/build.yml'
     paths:
       run: cd flutter_app && flutter build apk --release
 

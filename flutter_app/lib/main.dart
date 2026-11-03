@@ -1,3 +1,142 @@
+
+const express = require("express");
+const cors = require("cors");
+const { PrismaClient } = require("@prisma/client");
+
+const app = express();
+const prisma = new PrismaClient();
+
+app.use(cors());
+app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
+
+// Verificação do servidor
+app.get("/api", (req, res) => {
+  res.json({
+    status: "online",
+    aplicativo: "Minha Carteira",
+    mensagem: "Servidor funcionando!"
+  });
+});
+
+// Criar usuário
+app.post("/api/usuarios", async (req, res) => {
+  try {
+    const { nome, email } = req.body;
+
+    if (!nome || !email) {
+      return res.status(400).json({
+        erro: "Nome e email são obrigatórios."
+      });
+    }
+
+    const existente = await prisma.usuario.findUnique({
+      where: { email }
+    });
+
+    if (existente) {
+      return res.status(409).json({
+        erro: "Este email já está cadastrado."
+      });
+    }
+
+    const usuario = await prisma.usuario.create({
+      data: { nome, email }
+    });
+
+    res.status(201).json(usuario);
+  } catch (erro) {
+    res.status(500).json({
+      erro: "Não foi possível cadastrar o usuário."
+    });
+  }
+});
+
+// Listar usuários
+app.get("/api/usuarios", async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        criadoEm: true
+      }
+    });
+
+    res.json(usuarios);
+  } catch (erro) {
+    res.status(500).json({
+      erro: "Erro ao consultar usuários."
+    });
+  }
+});
+
+// Consultar carteira
+app.get("/api/carteira/:usuarioId", async (req, res) => {
+  try {
+    const carteira = await prisma.carteira.findUnique({
+      where: {
+        usuarioId: req.params.usuarioId
+      }
+    });
+
+    if (!carteira) {
+      return res.status(404).json({
+        erro: "Carteira não encontrada."
+      });
+    }
+
+    res.json(carteira);
+  } catch (erro) {
+    res.status(500).json({
+      erro: "Erro ao consultar carteira."
+    });
+  }
+});
+
+// Consultar histórico
+app.get("/api/transacoes/:usuarioId", async (req, res) => {
+  try {
+    const transacoes = await prisma.transacao.findMany({
+      where: {
+        usuarioId: req.params.usuarioId
+      },
+      orderBy: {
+        criadoEm: "desc"
+      }
+    });
+
+    res.json(transacoes);
+  } catch (erro) {
+    res.status(500).json({
+      erro: "Erro ao consultar histórico."
+    });
+  }
+});
+
+// Configurações administrativas
+app.get("/api/configuracoes", async (req, res) => {
+  try {
+    const configuracoes = await prisma.configuracao.findMany();
+    res.json(configuracoes);
+  } catch (erro) {
+    res.status(500).json({
+      erro: "Erro ao carregar configurações."
+    });
+  }
+});
+
+// Encerrar servidor com segurança
+process.on("SIGINT", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+app.listen(PORT, () => {
+  console.log(`Minha Carteira online na porta ${PORT}`);
+});
 NavigationDestination(icon: Icon(Icons.smart_toy_outlined), label: 'Assistente IA'),  
       NavigationDestination(icon: Icon(Icons.help_outline), label: 'Ajuda'),  
     ]),  

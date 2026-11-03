@@ -4,8 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'flutter_app/**'
-      - '.github/workflows/build.yml'
+      run: cd flutter_app && flutter build apk --release
 
 jobs:
   build:

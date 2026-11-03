@@ -1,0 +1,41 @@
+name: Gerar APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Instalar dependências
+        working-directory: flutter_app
+        run: flutter pub get
+
+      - name: Gerar APK
+        working-directory: flutter_app
+        run: flutter build apk --release
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aplicativo-android
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk

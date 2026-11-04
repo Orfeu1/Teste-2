@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#100b24">
+  <title>NEXUS BANK</title>
+  <style>
+    :root{--bg:#0b0817;--panel:#17112b;--panel2:#21183a;--purple:#8b5cf6;--violet:#b49aff;--text:#f7f3ff;--muted:#aaa1bd;--line:#34294d;--green:#5ee0a0}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(ellipse at 50% -15%,#38205f 0%,#130d25 42%,var(--bg) 78%);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}
+    button,input{font:inherit} button{cursor:pointer}
+    .wrap{width:min(100%,480px);margin:auto;padding:22px 18px 100px}
+    .top{display:flex;align-items:center;justify-content:space-between;margin:8px 2px 28px}
+    .brand{display:flex;align-items:center;gap:11px;font-weight:850;letter-spacing:2px;font-size:16px}
+    .logo{width:39px;height:39px;border-radius:13px;background:linear-gradient(145deg,#b69aff,#6634d6);display:grid;place-items:center;box-shadow:0 7px 25px #8b5cf655}
+    .logo svg{width:25px;height:25px}
+    .pill{border:1px solid #493968;background:#211735;color:#d8caff;border-radius:30px;padding:8px 12px;font-size:11px;letter-spacing:.5px}
+    .hero{padding:28px 22px 24px;border:1px solid #493568;border-radius:26px;background:linear-gradient(135deg,#342054 0%,#1c1430 58%,#171027 100%);box-shadow:0 18px 55px #0005;position:relative;overflow:hidden}
+    .hero:after{content:"";position:absolute;width:190px;height:190px;border:1px solid #b69aff33;border-radius:50%;right:-78px;top:-80px;box-shadow:0 0 0 22px #b69aff0b,0 0 0 46px #b69aff08}
+    .eyebrow{font-size:11px;color:#c9b8ee;letter-spacing:1.7px;text-transform:uppercase}
+    h1{font-size:29px;line-height:1.15;margin:12px 0 9px;letter-spacing:-.8px}
+    .sub{color:#c0b6d2;font-size:13px;line-height:1.6;margin:0}
+    .balance-label{margin-top:28px;color:#c4b8d9;font-size:12px}
+    .balance{font-size:35px;font-weight:750;letter-spacing:-1px;margin:5px 0 0}
+    .actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 27px}
+    .action{border:1px solid var(--line);background:#171127;border-radius:17px;padding:13px 4px 11px;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:8px;font-size:11px}
+    .action .ico{width:39px;height:39px;border-radius:13px;background:#30214d;color:#cbb7ff;display:grid;place-items:center;font-size:19px}
+    .section-head{display:flex;justify-content:space-between;align-items:center;margin:24px 2px 13px}
+    h2{font-size:16px;margin:0;letter-spacing:.1px}.muted{color:var(--muted);font-size:12px}
+    .card{background:linear-gradient(145deg,#1c1530,#151023);border:1px solid var(--line);border-radius:19px;padding:16px;margin-bottom:12px}
+    .feature{display:flex;align-items:center;gap:13px}.feature-icon{width:45px;height:45px;border-radius:15px;background:#39245d;display:grid;place-items:center;font-size:21px}
+    .feature strong{display:block;font-size:13px;margin-bottom:4px}.feature span{font-size:11px;color:var(--muted)}
+    .feature button{margin-left:auto;border:0;background:#8b5cf6;color:white;border-radius:12px;padding:10px 13px;font-size:11px;font-weight:700}
+    .transaction{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid #302640}.transaction:last-child{border:0;padding-bottom:2px}
+    .tx-icon{width:39px;height:39px;border-radius:13px;background:#2b2140;display:grid;place-items:center}
+    .tx-info{flex:1}.tx-info strong{display:block;font-size:12px}.tx-info span{font-size:10px;color:var(--muted);display:block;margin-top:4px}
+    .amount{font-size:12px;font-weight:700}.positive{color:var(--green)}
+    .nav{position:fixed;bottom:0;left:0;right:0;background:#100c1dee;backdrop-filter:blur(18px);border-top:1px solid #302542;display:flex;justify-content:center;z-index:5}
+    .nav-inner{width:min(100%,480px);display:grid;grid-template-columns:repeat(4,1fr);padding:10px 8px max(12px,env(safe-area-inset-bottom))}
+    .nav button{border:0;background:none;color:#8f86a2;font-size:10px;display:grid;justify-items:center;gap:5px;padding:5px}.nav button b{font-size:18px;font-weight:500}.nav button.active{color:#c5aaff}
+    .screen{display:none}.screen.active{display:block}
+    .login{min-height:78vh;display:flex;flex-direction:column;justify-content:center}
+    .login .hero{margin-top:24px}.field{margin-top:16px}.field label{display:block;font-size:11px;color:#c3b8d4;margin-bottom:7px}
+    .field input{width:100%;background:#100c1d;border:1px solid #44365c;color:white;border-radius:13px;padding:14px;outline:none}
+    .primary{width:100%;border:0;border-radius:14px;padding:15px;background:linear-gradient(100deg,#9a6aff,#713be0);color:white;font-weight:750;margin-top:20px;box-shadow:0 8px 24px #7b4be044}
+    .small-note{font-size:10px;color:#9187a4;line-height:1.6;text-align:center;margin-top:15px}
+    .back{background:none;border:0;color:#cbb9f5;padding:8px 0;margin:8px 0}
+    .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:#33234e;border:1px solid #7253a3;color:#fff;padding:12px 16px;border-radius:13px;font-size:12px;display:none;z-index:9;max-width:90%;text-align:center}
+    .page-title{font-size:25px;margin:12px 0 7px}.page-desc{color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:20px}
+    @media(min-width:520px){.wrap{padding-top:30px}.nav{border-radius:18px 18px 0 0}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="brand"><div class="logo"><svg viewBox="0 0 32 32" fill="none"><path d="M6 8h20M6 16h20M6 24h20M11 4v24M21 4v24" stroke="white" stroke-width="2.2" stroke-linecap="round" opacity=".95"/></svg></div>NEXUS BANK</div>
+      <div class="pill">● AMBIENTE DEMO</div>
+    </header>
+
+    <section id="loginScreen" class="screen login active">
+      <div class="eyebrow">SEU DINHEIRO. SUAS CONEXÕES.</div>
+      <h1>O seu mundo financeiro começa aqui.</h1>
+      <p class="sub">Uma experiência digital feita para simplificar sua vida.</p>
+      <div class="hero">
+        <div class="eyebrow">BEM-VINDO AO NEXUS</div>
+        <h1>Acesse sua<br>conta.</h1>
+        <p class="sub">Entre na sua demonstração local.</p>
+        <div class="field"><label for="email">E-MAIL</label><input id="email" type="email" placeholder="voce@email.com" autocomplete="email"></div>
+        <div class="field"><label for="password">SENHA</label><input id="password" type="password" placeholder="Digite qualquer senha" autocomplete="current-password"></div>
+        <button class="primary" onclick="login()">Entrar na demonstração</button>
+        <p class="small-note">Esta é uma demonstração visual local. Não informe senhas bancárias reais.</p>
+      </div>
+    </section>
+
+    <section id="homeScreen" class="screen">
+      <div class="eyebrow">OLÁ, BEM-VINDO DE VOLTA</div>
+      <h1 style="margin-top:8px">Seu dinheiro,<br>em movimento.</h1>
+      <p class="sub">Tudo conectado em um só lugar.</p>
+      <div class="hero" style="margin-top:22px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span class="eyebrow">SALDO DISPONÍVEL</span><span style="font-size:18px">✦</span></div>
+        <div class="balance-label">Saldo da demonstração</div>
+        <div class="balance" id="balance">R$ 5.280,50</div>
+        <div class="muted" style="margin-top:12px">Conta digital •••• 2048</div>
+      </div>
+      <div class="actions">
+        <button class="action" onclick="toast('O Pix será conectado quando houver uma API bancária configurada.')"><span class="ico">⇄</span>Pix</button>
+        <button class="action" onclick="toast('Área de transferências demonstrativa.')"><span class="ico">↗</span>Enviar</button>
+        <button class="action" onclick="toast('Cartões: funcionalidade demonstrativa.')"><span class="ico">▣</span>Cartões</button>
+        <button class="action" onclick="toast('Área de pagamentos demonstrativa.')"><span class="ico">▤</span>Pagar</button>
+      </div>
+      <div class="section-head"><h2>Área de benefícios</h2><span class="muted">Nexus+</span></div>
+      <div class="card feature"><div class="feature-icon">✧</div><div><strong>Recompensas Nexus</strong><span>Descubra vantagens e novidades.</span></div><button onclick="toast('Em breve: programa de recompensas.')">Explorar</button></div>
+      <div class="section-head"><h2>Atividade recente</h2><span class="muted">Ver tudo</span></div>
+      <div class="card" id="transactions">
+        <div class="transaction"><div class="tx-icon">🛍️</div><div class="tx-info"><strong>Compra demonstrativa</strong><span>Hoje • 14:32</span></div><div class="amount">- R$ 89,90</div></div>
+        <div class="transaction"><div class="tx-icon">↙</div><div class="tx-info"><strong>Crédito recebido</strong><span>Ontem • 09:15</span></div><div class="amount positive">+ R$ 350,00</div></div>
+        <div class="transaction"><div class="tx-icon">☕</div><div class="tx-info"><strong>Café</strong><span>01 nov • 08:42</span></div><div class="amount">- R$ 18,50</div></div>
+      </div>
+    </section>
+
+    <section id="historyScreen" class="screen">
+      <div class="eyebrow">NEXUS BANK</div><h1 class="page-title">Histórico</h1><p class="page-desc">Acompanhe suas movimentações nesta demonstração.</p>
+      <div class="card" id="historyList"></div>
+    </section>
+    <section id="assistantScreen" class="screen">
+      <div class="eyebrow">NEXUS INTELLIGENCE</div><h1 class="page-title">Assistente Nexus</h1><p class="page-desc">Uma área preparada para receber o assistente inteligente do banco.</p>
+      <div class="card"><div class="feature"><div class="feature-icon">✧</div><div><strong>Como posso ajudar?</strong><span>Organização financeira, dúvidas e orientações.</span></div></div><div class="field"><label for="question">SUA MENSAGEM</label><input id="question" placeholder="Escreva sua dúvida..."></div><button class="primary" onclick="assistantReply()">Enviar mensagem</button><p id="reply" class="small-note"></p></div>
+    </section>
+    <section id="profileScreen" class="screen">
+      <div class="eyebrow">SUA CONTA</div><h1 class="page-title">Perfil</h1><p class="page-desc">Configurações da demonstração local.</p>
+      <div class="card"><div class="feature"><div class="feature-icon">♙</div><div><strong id="profileEmail">Cliente Nexus</strong><span>Conta de demonstração</span></div></div></div>
+      <div class="card feature"><div class="feature-icon">⚙</div><div><strong>Segurança e privacidade</strong><span>Recursos ilustrativos.</span></div></div>
+      <button class="primary" onclick="logout()">Sair da demonstração</button>
+    </section>
+  </main>
+
+  <nav class="nav" id="nav" style="display:none"><div class="nav-inner">
+    <button class="active" data-screen="homeScreen" onclick="showScreen('homeScreen',this)"><b>⌂</b>Início</button>
+    <button data-screen="historyScreen" onclick="showScreen('historyScreen',this)"><b>↻</b>Histórico</button>
+    <button data-screen="assistantScreen" onclick="showScreen('assistantScreen',this)"><b>✧</b>Assistente</button>
+    <button data-screen="profileScreen" onclick="showScreen('profileScreen',this)"><b>♙</b>Perfil</button>
+  </div></nav>
+  <div class="toast" id="toast"></div>
+<script>
+  const demoTransactions = [
+    ['🛍️','Compra demonstrativa','Hoje • 14:32','- R$ 89,90',false],
+    ['↙','Crédito recebido','Ontem • 09:15','+ R$ 350,00',true],
+    ['☕','Café','01 nov • 08:42','- R$ 18,50',false]
+  ];
+  function login(){
+    const email=document.getElementById('email').value.trim();
+    const pass=document.getElementById('password').value;
+    if(!email || !pass){toast('Preencha o e-mail e a senha para entrar na demonstração.');return;}
+    document.getElementById('profileEmail').textContent=email;
+    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('homeScreen').classList.add('active');
+    document.getElementById('nav').style.display='block';
+    document.getElementById('historyList').innerHTML=makeTransactions();
+  }
+  function logout(){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('loginScreen').classList.add('active');
+    document.getElementById('nav').style.display='none';
+    document.getElementById('password').value='';
+  }
+  function showScreen(id,btn){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  function makeTransactions(){return demoTransactions.map(t=>`<div class="transaction"><div class="tx-icon">${t[0]}</div><div class="tx-info"><strong>${t[1]}</strong><span>${t[2]}</span></div><div class="amount ${t[4]?'positive':''}">${t[3]}</div></div>`).join('');}
+  function assistantReply(){
+    const q=document.getElementById('question').value.trim();
+    document.getElementById('reply').textContent=q?'Esta é a versão local de demonstração. O assistente real será conectado ao serviço de IA do projeto.':'Digite uma mensagem primeiro.';
+  }
+  let toastTimer;
+  function toast(message){
+    const el=document.getElementById('toast');el.textContent=message;el.style.display='block';
+    clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',3300);
+  }
+</script>
+</body>
+</html>

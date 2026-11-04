@@ -1,62 +1,92 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-model User {
-  id String @id @default(uuid())
-  name String
-  email String @unique
-  passwordHash String
-  role String @default("user")
-  blocked Boolean @default(false)
-  createdAt DateTime @default(now())
-  wallet Wallet?
-  transactions Transaction[]
-  claims RewardClaim[]
-}
-model Wallet {
-  id String @id @default(uuid())
-  userId String @unique
-  balance BigInt @default(0)
-  updatedAt DateTime @updatedAt
-  user User @relation(fields: [userId], references: [id])
-}
-model Transaction {
-  id String @id @default(uuid())
-  userId String
-  type String
-  amount BigInt
-  description String
-  status String @default("completed")
-  reference String? @unique
-  createdAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id])
-  @@index([userId, createdAt])
-}
-model RewardCampaign {
-  id String @id
-  name String
-  rewardCents BigInt
-  budgetCents BigInt
-  active Boolean @default(true)
-  claims RewardClaim[]
-}
-model RewardClaim {
-  id String @id @default(uuid())
-  userId String
-  campaignId String
-  amount BigInt
-  createdAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id])
-  campaign RewardCampaign @relation(fields: [campaignId], references: [id])
-  @@unique([userId, campaignId])
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
-model AppSetting {
-  key String @id
-  value Json
+enum TransactionType {
+  TRANSFER
+  REWARD
+  ADMIN_CREDIT
+}
+
+model User {
+  id                String        @id @default(cuid())
+  name              String
+  email             String        @unique
+  passwordHash      String
+  role              UserRole      @default(USER)
+  isActive          Boolean       @default(true)
+  wallet            Wallet?
+  sentTransactions  Transaction[] @relation("TransactionSender")
+  receivedTransactions Transaction[] @relation("TransactionReceiver")
+  rewardClaims      RewardClaim[]
+  adminLogs         AuditLog[]    @relation("AuditAdmin")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([createdAt])
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedAt DateTime @updatedAt
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Int
+  description String
+  senderId    String?
+  receiverId  String?
+  sender      User?           @relation("TransactionSender", fields: [senderId], references: [id], onDelete: SetNull)
+  receiver    User?           @relation("TransactionReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([type, createdAt])
+}
+
+model RewardClaim {
+  id        String   @id @default(cuid())
+  userId    String
+  dayKey    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, dayKey])
+}
+
+model AppConfig {
+  id                 String   @id @default("main")
+  dailyReward        Int      @default(10)
+  rewardsEnabled     Boolean  @default(true)
+  welcomeMessage     String   @default("Bem-vindo ao NEXUS BANK.")
+  bannerTitle        String   @default("Sua carteira virtual NEXUS")
+  updatedAt          DateTime @updatedAt
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  action       String
+  targetUserId String?
+  details      Json?
+  admin        User     @relation("AuditAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+
+  @@index([adminId, createdAt])
 }

@@ -2,262 +2,269 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { Prisma, PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
-const app = express();
+const db = new PrismaClient();
 const PORT = Number(process.env.PORT || 3000);
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres.');
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (JWT_SECRET.length < 32) throw new Error('JWT_SECRET precisa ter pelo menos 32 caracteres.');
 
+const app = express();
+app.disable('x-powered-by');
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN === '*' ? '*' : (process.env.CORS_ORIGIN || '').split(',').filter(Boolean) }));
-app.use(express.json({ limit: '16kb' }));
+const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((v) => v.trim()).filter(Boolean);
+app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : false }));
+app.use(express.json({ limit: '20kb' }));
 
-const cents = n => Number(n) / 100;
-const tokenFor = user => jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '2h' });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
+const registerSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  email: z.string().trim().email().max(180),
+  password: z.string().min(10).max(100)
+});
+const loginSchema = z.object({ email: z.string().trim().email().max(180), password: z.string().min(1).max(100) });
+const transferSchema = z.object({
+  recipientEmail: z.string().trim().email().max(180),
+  amount: z.number().int().positive().max(1000000),
+  description: z.string().trim().max(120).optional()
+});
+const adminCreditSchema = z.object({ amount: z.number().int().positive().max(1000000), reason: z.string().trim().min(3).max(120) });
+const configSchema = z.object({
+  dailyReward: z.number().int().min(0).max(10000),
+  rewardsEnabled: z.boolean(),
+  welcomeMessage: z.string().trim().min(1).max(240),
+  bannerTitle: z.string().trim().min(1).max(80)
+});
 
-function auth(req, res, next) {
-  const raw = req.headers.authorization || '';
-  if (!raw.startsWith('Bearer ')) return res.status(401).json({ erro: 'Faça login novamente.' });
+const safeUser = (user) => ({ id: user.id, name: user.name, email: user.email, role: user.role });
+const tokenFor = (user) => jwt.sign(
+  { sub: user.id }, JWT_SECRET,
+  { expiresIn: process.env.JWT_EXPIRES_IN || '2h', issuer: 'nexus-bank', audience: 'nexus-app' }
+);
+const dayKey = () => new Date().toISOString().slice(0, 10);
+
+async function auth(req, res, next) {
   try {
-    req.userId = jwt.verify(raw.slice(7), JWT_SECRET).sub;
-    prisma.user.findUnique({ where: { id: req.userId }, select: { blocked: true } }).then(user => {
-      if (!user || user.blocked) return res.status(403).json({ erro: 'Conta bloqueada ou inexistente.' });
-      next();
-    }).catch(next);
-  } catch { res.status(401).json({ erro: 'Sessão inválida ou expirada.' }); }
-}
-
-async function requireAdmin(req, res, next) {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true, blocked: true } });
-    if (!user || user.blocked) return res.status(403).json({ erro: 'Conta sem permissão ou bloqueada.' });
-    if (user.role !== 'admin') return res.status(403).json({ erro: 'Acesso exclusivo do administrador.' });
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return res.status(401).json({ error: 'Faça login para continuar.' });
+    const payload = jwt.verify(header.slice(7), JWT_SECRET, { issuer: 'nexus-bank', audience: 'nexus-app' });
+    const user = await db.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) return res.status(401).json({ error: 'Conta indisponível.' });
+    req.user = user;
     next();
-  } catch (e) { next(e); }
-}
-
-async function getSettings() {
-  const rows = await prisma.appSetting.findMany();
-  const settings = Object.fromEntries(rows.map(row => [row.key, row.value]));
-  return { appName: settings.appName ?? 'Minha Carteira', maintenance: settings.maintenance ?? false,
-    maintenanceMessage: settings.maintenanceMessage ?? 'Estamos realizando uma manutenção. Tente novamente em breve.',
-    bannerText: settings.bannerText ?? '', features: settings.features ?? { rewards: true, assistant: true, history: true } };
-}
-
-
-app.use('/api', async (req, res, next) => {
-  if (req.path === '/health' || req.path.startsWith('/auth/')) return next();
-  try {
-    const settings = await getSettings();
-    if (!settings.maintenance) return next();
-    const raw = req.headers.authorization || '';
-    if (raw.startsWith('Bearer ')) {
-      try {
-        const payload = jwt.verify(raw.slice(7), JWT_SECRET);
-        const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true } });
-        if (user?.role === 'admin') return next();
-      } catch {}
-    }
-    return res.status(503).json({ erro: settings.maintenanceMessage });
-  } catch (e) { next(e); }
-});
-
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
-app.get('/api/config', async (_req, res, next) => { try { const s = await getSettings(); res.json({ appName: s.appName, bannerText: s.bannerText, maintenance: s.maintenance, features: s.features }); } catch (e) { next(e); } });
-
-app.post('/api/auth/register', async (req, res, next) => {
-  try {
-    const parsed = z.object({
-      nome: z.string().trim().min(2).max(80),
-      email: z.string().trim().email().max(160),
-      senha: z.string().min(10).max(72)
-    }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ erro: 'Nome, e-mail ou senha inválidos. A senha precisa ter 10 caracteres.' });
-    const { nome, email, senha } = parsed.data;
-    const user = await prisma.user.create({
-      data: { name: nome, email: email.toLowerCase(), passwordHash: await bcrypt.hash(senha, 12), wallet: { create: {} } },
-      select: { id: true, name: true, email: true }
-    });
-    res.status(201).json({ mensagem: 'Conta criada.', usuario: user });
-  } catch (e) {
-    if (e.code === 'P2002') return res.status(409).json({ erro: 'E-mail já cadastrado.' });
-    next(e);
+  } catch {
+    return res.status(401).json({ error: 'Sessão inválida ou expirada. Entre novamente.' });
   }
+}
+function admin(req, res, next) {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+  next();
+}
+async function ensureConfig() {
+  return db.appConfig.upsert({ where: { id: 'main' }, create: { id: 'main' }, update: {} });
+}
+
+app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'NEXUS BANK API', mode: 'VIRTUAL_TEST_ONLY' }));
+
+app.post('/api/auth/register', authLimiter, async (req, res, next) => {
+  try {
+    const data = registerSchema.parse(req.body);
+    const email = data.email.toLowerCase();
+    const passwordHash = await bcrypt.hash(data.password, 12);
+    const user = await db.user.create({
+      data: { name: data.name, email, passwordHash, wallet: { create: { balance: 0 } } }
+    });
+    res.status(201).json({ token: tokenFor(user), user: safeUser(user) });
+  } catch (error) { next(error); }
 });
 
-app.post('/api/auth/login', async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, async (req, res, next) => {
   try {
-    const parsed = z.object({ email: z.string().email(), senha: z.string().min(1).max(72) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ erro: 'E-mail ou senha inválidos.' });
-    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
-    if (!user || !(await bcrypt.compare(parsed.data.senha, user.passwordHash))) return res.status(401).json({ erro: 'E-mail ou senha inválidos.' });
-    if (user.blocked) return res.status(403).json({ erro: 'Esta conta está bloqueada. Procure o suporte.' });
-    res.json({ token: tokenFor(user), nome: user.name, role: user.role });
-  } catch (e) { next(e); }
+    const data = loginSchema.parse(req.body);
+    const user = await db.user.findUnique({ where: { email: data.email.toLowerCase() } });
+    if (!user || !user.isActive || !(await bcrypt.compare(data.password, user.passwordHash))) {
+      return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
+    }
+    res.json({ token: tokenFor(user), user: safeUser(user) });
+  } catch (error) { next(error); }
 });
+
+app.get('/api/config', async (_req, res, next) => {
+  try {
+    const config = await ensureConfig();
+    res.json({ dailyReward: config.dailyReward, rewardsEnabled: config.rewardsEnabled,
+      welcomeMessage: config.welcomeMessage, bannerTitle: config.bannerTitle,
+      currencyCode: 'NX', currencyLabel: 'MOEDAS VIRTUAIS SEM VALOR MONETÁRIO' });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/me', auth, (req, res) => res.json({ user: safeUser(req.user) }));
 
 app.get('/api/wallet', auth, async (req, res, next) => {
   try {
-    const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
-    if (!wallet) return res.status(404).json({ erro: 'Carteira não encontrada.' });
-    res.json({ saldo: cents(wallet.balance), moeda: 'BRL', atualizadoEm: wallet.updatedAt });
-  } catch (e) { next(e); }
+    const wallet = await db.wallet.findUnique({ where: { userId: req.user.id } });
+    if (!wallet) return res.status(404).json({ error: 'Carteira não encontrada.' });
+    res.json({ balance: wallet.balance, currencyCode: 'NX', currencyLabel: 'MOEDAS VIRTUAIS' });
+  } catch (error) { next(error); }
 });
 
 app.get('/api/transactions', auth, async (req, res, next) => {
   try {
-    const rows = await prisma.transaction.findMany({ where: { userId: req.userId }, orderBy: { createdAt: 'desc' }, take: 100 });
-    res.json({ transactions: rows.map(x => ({
-      id: x.id, tipo: x.type, valor: cents(x.amount), descricao: x.description,
-      status: x.status, data: x.createdAt
-    })) });
-  } catch (e) { next(e); }
+    const rows = await db.transaction.findMany({
+      where: { OR: [{ senderId: req.user.id }, { receiverId: req.user.id }] },
+      orderBy: { createdAt: 'desc' }, take: 100,
+      include: { sender: { select: { name: true, email: true } }, receiver: { select: { name: true, email: true } } }
+    });
+    res.json(rows.map((row) => ({
+      id: row.id, type: row.type, amount: row.amount, description: row.description,
+      createdAt: row.createdAt,
+      direction: row.receiverId === req.user.id ? 'IN' : 'OUT',
+      otherParty: row.receiverId === req.user.id ? row.sender?.email : row.receiver?.email
+    })));
+  } catch (error) { next(error); }
 });
 
-app.post('/api/rewards/claim', auth, async (req, res, next) => {
-  const campaignId = String(req.body?.campaignId || '');
-  if (!campaignId || campaignId.length > 80) return res.status(400).json({ erro: 'Campanha inválida.' });
+app.post('/api/transfers/internal', auth, writeLimiter, async (req, res, next) => {
   try {
-    const result = await prisma.$transaction(async tx => {
-      const campaign = await tx.rewardCampaign.findUnique({ where: { id: campaignId } });
-      if (!campaign?.active) throw Object.assign(new Error('Campanha indisponível.'), { status: 404 });
-      const already = await tx.rewardClaim.findUnique({ where: { userId_campaignId: { userId: req.userId, campaignId } } });
-      if (already) throw Object.assign(new Error('Você já solicitou esta recompensa.'), { status: 409 });
-      const reserve = await tx.rewardCampaign.updateMany({
-        where: { id: campaignId, active: true, budgetCents: { gte: campaign.rewardCents } },
-        data: { budgetCents: { decrement: campaign.rewardCents } }
+    const data = transferSchema.parse(req.body);
+    const email = data.recipientEmail.toLowerCase();
+    if (email === req.user.email) return res.status(400).json({ error: 'Não é possível transferir para si mesmo.' });
+    const recipient = await db.user.findUnique({ where: { email } });
+    if (!recipient || !recipient.isActive) return res.status(404).json({ error: 'Destinatário não encontrado.' });
+
+    await db.$transaction(async (tx) => {
+      const senderWallet = await tx.wallet.findUnique({ where: { userId: req.user.id } });
+      const recipientWallet = await tx.wallet.findUnique({ where: { userId: recipient.id } });
+      if (!senderWallet || !recipientWallet) throw new Error('WALLET_NOT_FOUND');
+      const debit = await tx.wallet.updateMany({
+        where: { id: senderWallet.id, balance: { gte: data.amount } },
+        data: { balance: { decrement: data.amount } }
       });
-      if (reserve.count !== 1) throw Object.assign(new Error('Orçamento da campanha esgotado.'), { status: 409 });
-      await tx.rewardClaim.create({ data: { userId: req.userId, campaignId, amount: campaign.rewardCents } });
-      await tx.wallet.update({ where: { userId: req.userId }, data: { balance: { increment: campaign.rewardCents } } });
+      if (debit.count !== 1) throw new Error('INSUFFICIENT_VIRTUAL_BALANCE');
+      await tx.wallet.update({ where: { id: recipientWallet.id }, data: { balance: { increment: data.amount } } });
       await tx.transaction.create({ data: {
-        userId: req.userId, type: 'reward', amount: campaign.rewardCents,
-        description: `Recompensa: ${campaign.name}`, reference: `reward_${randomUUID()}`
-      }});
-      const wallet = await tx.wallet.findUnique({ where: { userId: req.userId } });
-      return { amount: campaign.rewardCents, balance: wallet.balance };
-    });
-    res.json({ mensagem: 'Recompensa creditada conforme as regras da campanha.', valorCreditado: cents(result.amount), novoSaldo: cents(result.balance) });
-  } catch (e) {
-    if (e.status) return res.status(e.status).json({ erro: e.message });
-    if (e.code === 'P2002') return res.status(409).json({ erro: 'Recompensa já solicitada.' });
-    next(e);
+        type: 'TRANSFER', amount: data.amount,
+        description: data.description || 'Transferência interna de moedas virtuais',
+        senderId: req.user.id, receiverId: recipient.id
+      } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    res.status(201).json({ status: 'completed', amount: data.amount, currencyCode: 'NX' });
+  } catch (error) {
+    if (error.message === 'INSUFFICIENT_VIRTUAL_BALANCE') return res.status(409).json({ error: 'Saldo virtual insuficiente.' });
+    if (error.message === 'WALLET_NOT_FOUND') return res.status(404).json({ error: 'Carteira não encontrada.' });
+    next(error);
   }
 });
 
-
-// Rotas administrativas: permissão sempre validada no banco.
-app.get('/api/admin/overview', auth, requireAdmin, async (_req, res, next) => {
+app.post('/api/rewards/claim', auth, writeLimiter, async (req, res, next) => {
   try {
-    const [users, blocked, transactions, settings, campaigns] = await Promise.all([
-      prisma.user.count(), prisma.user.count({ where: { blocked: true } }), prisma.transaction.count(),
-      getSettings(), prisma.rewardCampaign.findMany({ orderBy: { id: 'asc' } })
+    const config = await ensureConfig();
+    if (!config.rewardsEnabled || config.dailyReward <= 0) return res.status(403).json({ error: 'O gerador de moedas está desativado.' });
+    const key = dayKey();
+    await db.$transaction(async (tx) => {
+      await tx.rewardClaim.create({ data: { userId: req.user.id, dayKey: key } });
+      await tx.wallet.update({ where: { userId: req.user.id }, data: { balance: { increment: config.dailyReward } } });
+      await tx.transaction.create({ data: {
+        type: 'REWARD', amount: config.dailyReward,
+        description: 'Recompensa diária - moedas virtuais sem valor monetário', receiverId: req.user.id
+      } });
+    });
+    res.status(201).json({ status: 'claimed', amount: config.dailyReward, currencyCode: 'NX' });
+  } catch (error) {
+    if (error.code === 'P2002') return res.status(409).json({ error: 'Você já resgatou sua recompensa de hoje.' });
+    next(error);
+  }
+});
+
+app.get('/api/admin/dashboard', auth, admin, async (_req, res, next) => {
+  try {
+    const [users, activeUsers, walletTotals, transactions, config] = await Promise.all([
+      db.user.count(), db.user.count({ where: { isActive: true } }),
+      db.wallet.aggregate({ _sum: { balance: true } }), db.transaction.count(), ensureConfig()
     ]);
-    res.json({ users, blocked, transactions, settings, campaigns: campaigns.map(c => ({ id: c.id, name: c.name, reward: cents(c.rewardCents), budget: cents(c.budgetCents), active: c.active })) });
-  } catch (e) { next(e); }
-});
-app.get('/api/admin/users', auth, requireAdmin, async (_req, res, next) => {
-  try { res.json({ users: await prisma.user.findMany({ orderBy: { createdAt: 'desc' }, take: 200, select: { id: true, name: true, email: true, role: true, blocked: true, createdAt: true } }) }); }
-  catch (e) { next(e); }
-});
-app.patch('/api/admin/users/:id/block', auth, requireAdmin, async (req, res, next) => {
-  try {
-    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!target) return res.status(404).json({ erro: 'Usuário não encontrado.' });
-    if (target.role === 'admin') return res.status(403).json({ erro: 'Não é permitido bloquear uma conta administradora por este painel.' });
-    const parsed = z.boolean().safeParse(req.body?.blocked);
-    if (!parsed.success) return res.status(400).json({ erro: 'Informe blocked como verdadeiro ou falso.' });
-    await prisma.user.update({ where: { id: target.id }, data: { blocked: parsed.data } });
-    res.json({ mensagem: parsed.data ? 'Usuário bloqueado.' : 'Usuário desbloqueado.' });
-  } catch (e) { next(e); }
-});
-app.put('/api/admin/settings', auth, requireAdmin, async (req, res, next) => {
-  try {
-    const parsed = z.object({ appName: z.string().trim().min(2).max(50).optional(), maintenance: z.boolean().optional(),
-      maintenanceMessage: z.string().trim().max(300).optional(), bannerText: z.string().trim().max(300).optional(),
-      features: z.object({ rewards: z.boolean().optional(), assistant: z.boolean().optional(), history: z.boolean().optional() }).optional() }).strict().safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ erro: 'Configuração inválida.' });
-    for (const [key, value] of Object.entries(parsed.data)) await prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
-    res.json({ mensagem: 'Configurações salvas.', settings: await getSettings() });
-  } catch (e) { next(e); }
-});
-app.post('/api/admin/ai/chat', auth, requireAdmin, async (req, res) => {
-  const parsed = z.object({ message: z.string().trim().min(1).max(3000) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ erro: 'Envie uma mensagem de até 3000 caracteres.' });
-  const message = parsed.data.message;
-  if (!process.env.ADMIN_AI_API_KEY || !process.env.ADMIN_AI_MODEL) return res.json({ mode: 'admin-ai-not-configured', reply: 'Sou a IA privada do painel. Minha conexão ainda não foi configurada. Defina ADMIN_AI_API_KEY e ADMIN_AI_MODEL no servidor. Posso ajudar a planejar melhorias, revisar configurações e explicar relatórios, mas não altero dados diretamente.' });
-  try {
-    const base = (process.env.ADMIN_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const response = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.ADMIN_AI_API_KEY}` },
-      body: JSON.stringify({ model: process.env.ADMIN_AI_MODEL, max_tokens: Number(process.env.ADMIN_AI_MAX_OUTPUT_TOKENS || 700), messages: [
-        { role: 'system', content: 'Você é a IA PRIVADA DO PAINEL ADMINISTRATIVO, diferente da IA dos usuários. Responda em português brasileiro. Ajude o administrador a planejar melhorias, interpretar indicadores, revisar configurações e preparar especificações. Este chat não executa alterações: nunca diga que as realizou. Nunca peça senhas, tokens, chaves de API ou dados pessoais completos. Diferencie fatos, hipóteses e sugestões.' },
-        { role: 'user', content: message }] }) });
-    if (!response.ok) return res.status(502).json({ erro: 'A IA administrativa está temporariamente indisponível.' });
-    const data = await response.json(); const reply = data?.choices?.[0]?.message?.content;
-    res.json({ mode: 'admin-ai', reply: typeof reply === 'string' && reply.trim() ? reply : 'Não consegui formular uma resposta.' });
-  } catch (e) { console.error('Admin AI error:', e.message); res.status(502).json({ erro: 'Falha ao conectar à IA administrativa.' }); }
+    res.json({ users, activeUsers, virtualCreditsInCirculation: walletTotals._sum.balance || 0,
+      transactions, config: { dailyReward: config.dailyReward, rewardsEnabled: config.rewardsEnabled,
+        welcomeMessage: config.welcomeMessage, bannerTitle: config.bannerTitle } });
+  } catch (error) { next(error); }
 });
 
-const fallbackReply = (message) => {
-  const m = message.toLowerCase();
-  if (m.includes('pix') || m.includes('saque')) return 'Os saques Pix ainda não estão habilitados. Eles só serão liberados depois de integrar uma instituição de pagamento e concluir os testes de segurança.';
-  if (m.includes('senha') || m.includes('código')) return 'Nunca compartilhe sua senha, código SMS ou código de autenticação. A equipe de suporte não deve pedir esses dados.';
-  if (m.includes('recompensa') || m.includes('50') || m.includes('dinheiro')) return 'As recompensas dependem das regras e do orçamento real disponível na campanha. Não existe promessa de multiplicação garantida do dinheiro.';
-  return 'Posso ajudar a explicar cadastro, carteira, histórico, recompensas e segurança. Para dúvidas sobre uma movimentação específica, consulte o histórico e procure o suporte oficial do aplicativo.';
-};
-
-app.post('/api/ai/chat', auth, async (req, res) => {
-  const parsed = z.object({ message: z.string().trim().min(1).max(1200) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ erro: 'Escreva uma pergunta de até 1200 caracteres.' });
-  const message = parsed.data.message;
-
-  // Sem chave configurada, o app continua com respostas locais de ajuda.
-  if (!process.env.AI_API_KEY || !process.env.AI_MODEL) {
-    return res.json({ reply: fallbackReply(message), mode: 'help-fallback' });
-  }
-
+app.get('/api/admin/users', auth, admin, async (_req, res, next) => {
   try {
-    const base = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const response = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.AI_MODEL,
-        max_tokens: Number(process.env.AI_MAX_OUTPUT_TOKENS || 350),
-        messages: [
-          { role: 'system', content: 'Você é o assistente de ajuda do aplicativo Carteira. Responda em português brasileiro, com clareza e empatia. Explique somente cadastro, uso do app, carteira, histórico, recompensas e segurança. Nunca solicite senhas, códigos SMS, tokens ou chaves Pix. Nunca prometa lucro, rendimento, multiplicação de dinheiro ou saque garantido. Não execute nem autorize pagamentos, transferências ou alterações de saldo. Se perguntarem sobre saque Pix, informe que depende da ativação oficial da instituição de pagamento. Não dê aconselhamento financeiro personalizado.' },
-          { role: 'user', content: message }
-        ]
-      })
+    const users = await db.user.findMany({
+      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true,
+        wallet: { select: { balance: true } } },
+      take: 200, orderBy: { createdAt: 'desc' }
     });
-    if (!response.ok) {
-      console.error('AI provider status:', response.status);
-      return res.json({ reply: fallbackReply(message), mode: 'help-fallback' });
-    }
-    const data = await response.json();
-    const reply = data?.choices?.[0]?.message?.content;
-    res.json({ reply: typeof reply === 'string' && reply.trim() ? reply : fallbackReply(message), mode: 'ai' });
-  } catch (e) {
-    console.error('AI request failed:', e.message);
-    res.json({ reply: fallbackReply(message), mode: 'help-fallback' });
-  }
+    res.json(users);
+  } catch (error) { next(error); }
 });
 
-// Pix permanece deliberadamente desativado até existir integração real com PSP.
-app.post('/api/pix/withdrawals', auth, (_req, res) => res.status(501).json({
-  erro: 'Saque Pix ainda não habilitado. É necessária integração com instituição de pagamento, webhooks assinados e conciliação.'
-}));
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ erro: 'Erro interno. Tente novamente mais tarde.' });
+app.post('/api/admin/users/:id/credits', auth, admin, writeLimiter, async (req, res, next) => {
+  try {
+    const data = adminCreditSchema.parse(req.body);
+    const target = await db.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    await db.$transaction(async (tx) => {
+      await tx.wallet.update({ where: { userId: target.id }, data: { balance: { increment: data.amount } } });
+      await tx.transaction.create({ data: {
+        type: 'ADMIN_CREDIT', amount: data.amount,
+        description: `Crédito virtual administrativo: ${data.reason}`, receiverId: target.id
+      } });
+      await tx.auditLog.create({ data: {
+        adminId: req.user.id, targetUserId: target.id, action: 'GRANT_VIRTUAL_CREDITS',
+        details: { amount: data.amount, reason: data.reason }
+      } });
+    });
+    res.status(201).json({ status: 'credited', amount: data.amount, currencyCode: 'NX' });
+  } catch (error) { next(error); }
 });
 
-app.listen(PORT, () => console.log(`Carteira API ativa na porta ${PORT}`));
-process.on('SIGINT', async () => { await prisma.$disconnect(); process.exit(0); });
+app.patch('/api/admin/users/:id/status', auth, admin, async (req, res, next) => {
+  try {
+    const data = z.object({ isActive: z.boolean() }).parse(req.body);
+    if (req.params.id === req.user.id && !data.isActive) return res.status(400).json({ error: 'O administrador não pode desativar a própria conta.' });
+    const target = await db.user.update({ where: { id: req.params.id }, data: { isActive: data.isActive } });
+    await db.auditLog.create({ data: { adminId: req.user.id, targetUserId: target.id,
+      action: data.isActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER', details: { isActive: data.isActive } } });
+    res.json({ id: target.id, isActive: target.isActive });
+  } catch (error) { next(error); }
+});
+
+app.patch('/api/admin/config', auth, admin, async (req, res, next) => {
+  try {
+    const data = configSchema.parse(req.body);
+    const config = await db.appConfig.upsert({ where: { id: 'main' }, create: { id: 'main', ...data }, update: data });
+    await db.auditLog.create({ data: { adminId: req.user.id, action: 'UPDATE_APP_CONFIG', details: data } });
+    res.json({ dailyReward: config.dailyReward, rewardsEnabled: config.rewardsEnabled,
+      welcomeMessage: config.welcomeMessage, bannerTitle: config.bannerTitle });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/admin/audit', auth, admin, async (_req, res, next) => {
+  try {
+    const rows = await db.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 100,
+      include: { admin: { select: { email: true } } } });
+    res.json(rows.map((row) => ({ id: row.id, action: row.action, targetUserId: row.targetUserId,
+      details: row.details, createdAt: row.createdAt, adminEmail: row.admin.email })));
+  } catch (error) { next(error); }
+});
+
+app.use((error, _req, res, _next) => {
+  if (error instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos.', details: error.issues });
+  if (error.code === 'P2002') return res.status(409).json({ error: 'Este cadastro já existe ou a operação já foi realizada.' });
+  if (error.code === 'P2025') return res.status(404).json({ error: 'Registro não encontrado.' });
+  console.error(error);
+  res.status(500).json({ error: 'Erro interno. Consulte os logs do servidor.' });
+});
+
+const server = app.listen(PORT, () => console.log(`NEXUS BANK API ouvindo na porta ${PORT} (somente carteira virtual de teste).`));
+async function shutdown() {
+  server.close(async () => { await db.$disconnect(); process.exit(0); });
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

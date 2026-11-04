@@ -1,75 +1,72 @@
-                       NEXUS 
-                        BANK
+# NEXUS BANK - projeto inicial completo de carteira virtual
 
-Projeto inicial integrado, organizado para trabalhar pelo celular e compilar APK em nuvem.
+Este repositório contém um aplicativo Flutter, uma API Node.js/Express, banco PostgreSQL via Prisma, painel administrativo dentro do app e fluxo GitHub Actions para gerar APK.
 
-## O que já está no projeto
-- App Flutter: cadastro, login, carteira, histórico, recompensas e chat de ajuda com IA.
-- Backend Node.js/Express: autenticação JWT, senhas com hash, saldo em centavos, histórico e campanhas com orçamento limitado.
-- PostgreSQL + Prisma.
-- Endpoint de IA configurável por provedor compatível com a API de Chat Completions.
-- Workflow GitHub Actions para compilar APK na nuvem.
+> **Limite essencial:** esta versão é uma carteira de **moedas virtuais NX de teste**. NX não é real, não é depósito, não é investimento, não pode ser convertido em reais e não pode ser sacado por Pix. Não existe promessa de transformar R$ 1 em R$ 50 nem de pagar retiradas sem fundos. A API não tem rotas de depósito bancário ou saque Pix.
 
-## Atenção: o que ainda NÃO está ativo
-- Não existe transferência Pix real nesta versão. O endpoint de saque fica desativado de propósito até integrar uma instituição de pagamento/PSP.
-- A IA precisa de uma chave de API configurada no servidor. Nunca coloque essa chave dentro do app Flutter.
-- A campanha de recompensa só pode distribuir valores que estejam realmente reservados. Não prometa rendimento ou multiplicação garantida.
-- Este é um projeto inicial para testes, não está pronto para custodiar dinheiro real ou operar publicamente.
+## Estrutura
 
-## 1. Backend
-Requisitos: Node.js 20+ e PostgreSQL.
+- `flutter_app/`: app Android Flutter (login, cadastro, carteira, transferências internas de NX, recompensa diária, histórico e painel ADMIN).
+- `backend/`: API, autenticação JWT, hash de senha, PostgreSQL, transferências atômicas de NX, recompensas com limite diário, gestão administrativa e auditoria.
+- `.github/workflows/build-apk.yml`: compila APK release e publica o arquivo como artefato do GitHub Actions.
+- `docs/`: especificação funcional e endpoints.
 
-Entre em `backend/`, copie `.env.example` para `.env` e configure:
-- `DATABASE_URL`
-- `JWT_SECRET` (32 caracteres ou mais)
-- `AI_API_KEY`, `AI_BASE_URL` e `AI_MODEL` se quiser ativar a IA real.
-- Configure `WELCOME_REWARD_CENTS` e `WELCOME_CAMPAIGN_BUDGET_CENTS` somente depois de reservar fundos reais para a campanha; os valores de exemplo começam em zero.
+## O que funciona nesta base
 
-Instale e inicie:
+1. Cadastro e login de usuário com senha armazenada em hash bcrypt.
+2. Carteira separada por usuário, com saldo inteiro de moedas NX.
+3. Transferência interna de moedas NX com verificação de saldo na transação do banco de dados.
+4. Recompensa virtual diária com bloqueio de resgate repetido no mesmo dia.
+5. Administrador configurável por variáveis privadas do servidor; ao criar a conta pela primeira vez, recebe 100.000 NX de teste por padrão (ajustável).
+6. Painel ADMIN no app para listar usuários, creditar moedas virtuais, ativar/desativar contas e mudar banner, mensagem e recompensa diária.
+7. Registros de auditoria para créditos e mudanças administrativas.
+8. Token JWT armazenado no armazenamento seguro do Android.
 
-```bash
-npm install
-npx prisma generate
-npx prisma migrate dev --name init
-npm run db:seed
-npm run dev
-```
+## O que NÃO está incluído
 
-Teste `GET /api/health`.
+- Pix real, saque, depósito, cartão, boleto, Open Finance, crédito ou qualquer conexão com saldo de banco.
+- Conversão de NX em BRL ou saque dos NX.
+- Licença/autorização para operar como instituição financeira ou de pagamento.
+- Infraestrutura de produção auditada, monitoramento, antifraude e certificações.
 
-Crie conta pela tela do app. O app chama `POST /api/auth/register`.
+Uma operação com dinheiro real exige contrato e integração com uma instituição/provedor autorizado, conta de liquidação, regras de saldo lastreado, conciliação, controles antifraude/PLD, atendimento, privacidade e avaliação jurídica/regulatória. Não basta alterar o texto do app ou criar um endpoint Pix.
 
-## 2. App Flutter
-Entre em `flutter_app/`.
+## Configuração do backend
 
-Instale Flutter e dependências num ambiente Flutter:
+É necessário publicar a pasta `backend` em um host que execute Node.js 20+ e fornecer PostgreSQL. O host deve disponibilizar URL HTTPS pública para o app.
 
-```bash
-flutter pub get
-flutter run --dart-define=API_BASE_URL=https://SEU_BACKEND
-```
+1. Copie `backend/.env.example` para `.env` no ambiente do servidor (não envie o `.env` ao GitHub).
+2. Configure `DATABASE_URL` com sua conexão PostgreSQL.
+3. Configure `JWT_SECRET` com uma chave aleatória de no mínimo 32 caracteres. Exemplo para gerar localmente: `openssl rand -hex 32`.
+4. Configure `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD`; use uma senha forte, única e com 14 ou mais caracteres.
+5. Instale dependências: `npm install`.
+6. Gere o cliente e crie as tabelas: `npx prisma generate` e `npx prisma db push`.
+7. Crie o primeiro administrador: `npm run db:seed`.
+8. Inicie com `npm start`.
+9. Teste `https://SUA-API/health`. A resposta deve indicar `status: ok`.
 
-No Android Emulator local, normalmente a API local do computador é `http://10.0.2.2:3000/api`.
-No celular físico, `localhost` é o próprio celular; use o IP da máquina na mesma rede ou, para produção, um domínio HTTPS.
+**Importante:** `INITIAL_ADMIN_VIRTUAL_CREDITS=100000` concede NX fictício apenas quando a conta ADMIN é criada pela primeira vez. Rodar o seed novamente não soma os créditos outra vez.
 
-## 3. Gerar APK sem computador usando GitHub Actions
-O projeto inclui `.github/workflows/build-apk.yml`.
+## Gerar o APK pelo GitHub usando o celular
 
-1. Crie um repositório no GitHub pelo navegador do celular.
-2. Envie o conteúdo desta pasta para o repositório, mantendo as pastas e o caminho `.github/workflows/build-apk.yml`.
-3. No GitHub, abra a aba **Actions** e habilite workflows se solicitado.
-4. Abra **Build Android APK** e toque em **Run workflow** (ou faça um commit para disparar automaticamente).
-5. Quando terminar, abra a execução e baixe o artefato `carteira-apk`.
+Depois que o backend estiver publicado e o endereço HTTPS funcionar:
 
-Configure a variável `API_BASE_URL` em Settings > Secrets and variables > Actions > Variables, com a URL HTTPS pública do backend. Sem backend hospedado, o APK pode abrir, mas login, carteira e IA não funcionarão online.
+1. Envie a pasta deste projeto para um repositório GitHub.
+2. No repositório, abra **Settings > Secrets and variables > Actions > New repository secret**.
+3. Nome: `API_BASE_URL`. Valor: URL HTTPS do servidor terminando em `/api`, por exemplo `https://api.seudominio.com/api`.
+4. Abra **Actions > NEXUS BANK - Build APK > Run workflow**.
+5. Quando a execução terminar com sucesso, abra a execução e baixe o artefato `nexus-bank-apk`.
 
-## Painel administrativo e IA privada
-- O usuário recebe o papel `user` por padrão; o cadastro público nunca permite escolher papel administrativo.
-- Configure `ADMIN_EMAIL` e `ADMIN_PASSWORD` no ambiente do backend antes de executar `npm run db:seed`. A senha inicial do administrador precisa ter 16 caracteres ou mais. O seed cria/atualiza essa conta como `admin`.
-- O painel aparece após o login da conta administradora. As rotas `/api/admin/*` verificam a função no banco de dados.
-- A IA do painel usa `ADMIN_AI_BASE_URL`, `ADMIN_AI_API_KEY` e `ADMIN_AI_MODEL`, independentes de `AI_*` da IA de atendimento. Ela é um chat consultivo e não executa mudanças diretamente.
-- O painel inicial inclui indicadores, bloqueio/desbloqueio de usuários, nome do app, aviso/banner e modo de manutenção. Recursos novos que não existam no código ainda exigem desenvolvimento e publicação de nova versão.
-- Para aplicar o novo schema, execute `npx prisma db push` (ou crie uma migration revisada) antes de iniciar o backend.
+O workflow executa `flutter analyze` antes da compilação. Se a análise ou compilação falhar, consulte o log da etapa indicada; não ignore os erros.
 
-## Segurança antes de produção
-Adicionar rate limiting persistente, verificação de e-mail/telefone, recuperação de senha, proteção contra abuso, logs de auditoria, monitoramento, backups, política de privacidade/LGPD, testes de concorrência, revisão de segurança e integração de PSP com webhooks assinados e conciliação. Configure CORS apenas para origens necessárias e use HTTPS.
+## Antes de instalar em aparelhos de outras pessoas
+
+- Configure domínio HTTPS e CORS para qualquer painel web adicional.
+- Revise política de privacidade, termos, canal de suporte e tratamento de dados pessoais.
+- Faça teste com contas distintas e tentativas de saldo insuficiente, transferência duplicada, resgate repetido e conta desativada.
+- Troque/remova credenciais de teste e proteja o administrador com MFA antes de qualquer piloto.
+- Nunca peça que clientes depositem dinheiro acreditando que NX é dinheiro ou que será possível sacar.
+
+## Testes de sintaxe disponíveis neste ambiente
+
+O arquivo Node foi verificado com `node --check`. Este ambiente não tem Flutter/Dart nem PostgreSQL configurados, então a compilação Android, o Prisma contra um banco real e os fluxos integrados precisam ser validados no GitHub Actions/servidor antes de distribuir o APK.

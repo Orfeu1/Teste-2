@@ -3,15 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "prisma:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy",
-    "db:seed": "node prisma/seed-admin.js",
-    "check": "node --check src/server.js && node --check prisma/seed-admin.js"
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "prisma:generate": "prisma generate --schema=./schema.prisma",
+    "db:push": "prisma db push --schema=./schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema=./schema.prisma",
+    "db:seed": "node seed-admin.js",
+    "check": "node --check server.js && node --check seed-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -24,5 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "zod": "^3.24.2"
   },
-  "devDependencies": { "prisma": "^6.19.0" }
+  "devDependencies": {
+    "prisma": "^6.19.0"
+  }
 }

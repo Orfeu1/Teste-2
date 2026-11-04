@@ -9,14 +9,13 @@ RUN npm install
 
 COPY backend/prisma ./prisma
 
-RUN npx prisma generate
+RUN npx prisma generate && npm prune --omit=dev
 
 COPY backend/src ./src
-
-RUN npm prune --omit=dev
 
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
 CMD ["npm", "start"]
+

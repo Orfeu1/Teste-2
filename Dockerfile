@@ -1,17 +1,19 @@
-
 FROM node:20-alpine
+
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-COPY backend/package*.json ./
+COPY package*.json ./
 
 RUN npm install
 
-COPY backend/prisma ./prisma
+COPY schema.prisma ./schema.prisma
 
-RUN npx prisma generate
+RUN npx prisma generate --schema=./schema.prisma
 
-COPY backend/src ./src
+COPY server.js ./server.js
+COPY seed-admin.js ./seed-admin.js
 
 RUN npm prune --omit=dev
 

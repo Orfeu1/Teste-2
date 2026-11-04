@@ -501,6 +501,672 @@ class _AssistantPageState extends State<AssistantPage> {
   ]);
 }
 
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+const apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:3000/api',
+);
+
+const purple = Color(0xFF7138D8);
+const darkPurple = Color(0xFF21103F);
+
+void main() {
+  runApp(const NexusBankApp());
+}
+
+class NexusBankApp extends StatelessWidget {
+  const NexusBankApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'NEXUS BANK',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: purple,
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF7F5FC),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF7F5FC),
+          foregroundColor: darkPurple,
+          elevation: 0,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      home: const AuthPage(),
+    );
+  }
+}
+
+class Api {
+  String? token;
+  bool isAdmin = false;
+
+  Uri uri(String path) => Uri.parse('$apiBaseUrl$path');
+
+  Map<String, String> get headers => {
+    'Content-Type': 'application/json',
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
+
+  dynamic decode(http.Response response) {
+    dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception('Resposta inválida do servidor.');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        data is Map
+            ? (data['erro'] ?? data['error'] ?? 'Erro ${response.statusCode}')
+                .toString()
+            : 'Erro ${response.statusCode}',
+      );
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> register(
+    String nome,
+    String email,
+    String senha,
+  ) async {
+    final response = await http.post(
+      uri('/auth/register'),
+      headers: headers,
+      body: jsonEncode({
+        'nome': nome,
+        'email': email,
+        'senha': senha,
+      }),
+    ).timeout(const Duration(seconds: 20));
+
+    return Map<String, dynamic>.from(decode(response));
+  }
+
+  Future<String> login(String email, String senha) async {
+    final response = await http.post(
+      uri('/auth/login'),
+      headers: headers,
+      body: jsonEncode({'email': email, 'senha': senha}),
+    ).timeout(const Duration(seconds: 20));
+
+    final data = Map<String, dynamic>.from(decode(response));
+    token = data['token']?.toString();
+    isAdmin = data['role'] == 'admin';
+
+    if (token == null || token!.isEmpty) {
+      throw Exception('O servidor não enviou o token de acesso.');
+    }
+
+    return data['nome']?.toString() ?? 'Pessoa';
+  }
+
+  Future<Map<String, dynamic>> wallet() async {
+    final response = await http.get(
+      uri('/wallet'),
+      headers: headers,
+    ).timeout(const Duration(seconds: 20));
+
+    return Map<String, dynamic>.from(decode(response));
+  }
+
+  Future<List<dynamic>> transactions() async {
+    final response = await http.get(
+      uri('/transactions'),
+      headers: headers,
+    ).timeout(const Duration(seconds: 20));
+
+    final data = decode(response);
+    return List<dynamic>.from(data['transactions'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> publicConfig() async {
+    final response = await http.get(
+      uri('/config'),
+    ).timeout(const Duration(seconds: 20));
+
+    return Map<String, dynamic>.from(decode(response));
+  }
+
+  Future<Map<String, dynamic>> claimReward() async {
+    final response = await http.post(
+      uri('/rewards/claim'),
+      headers: headers,
+      body: jsonEncode({'campaignId': 'welcome'}),
+    ).timeout(const Duration(seconds: 20));
+
+    return Map<String, dynamic>.from(decode(response));
+  }
+
+  void logout() {
+    token = null;
+    isAdmin = false;
+  }
+}
+
+String money(dynamic value) {
+  final number = value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '') ?? 0;
+  return 'R\$ ${number.toStringAsFixed(2).replaceAll('.', ',')}';
+}
+
+void showMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message)),
+  );
+}
+
+class AuthPage extends StatefulWidget {
+  const AuthPage({super.key});
+
+  @override
+  State<AuthPage> createState() => _AuthPageState();
+}
+
+class _AuthPageState extends State<AuthPage> {
+  final api = Api();
+  final nameController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  bool registering = false;
+  bool loading = false;
+  bool obscure = true;
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    final name = nameController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (email.isEmpty || password.isEmpty ||
+        (registering && name.isEmpty)) {
+      showMessage(context, 'Preencha todos os campos.');
+      return;
+    }
+
+    setState(() => loading = true);
+
+    try {
+      if (registering) {
+        await api.register(name, email, password);
+      }
+
+      final userName = await api.login(email, password);
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BankHome(api: api, userName: userName),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        showMessage(
+          context,
+          e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [darkPurple, Color(0xFF482080), purple],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(26),
+              child: Column(
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'NEXUS BANK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Seu mundo financeiro, conectado.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 35),
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9F7FF),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          registering ? 'Criar conta' : 'Bem-vindo de volta',
+                          style: const TextStyle(
+                            fontSize: 23,
+                            fontWeight: FontWeight.bold,
+                            color: darkPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        if (registering) ...[
+                          TextField(
+                            controller: nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nome completo',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        TextField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'E-mail',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: passwordController,
+                          obscureText: obscure,
+                          decoration: InputDecoration(
+                            labelText: 'Senha',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              onPressed: () =>
+                                  setState(() => obscure = !obscure),
+                              icon: Icon(obscure
+                                  ? Icons.visibility
+                                  : Icons.visibility_off),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        FilledButton(
+                          onPressed: loading ? null : submit,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: purple,
+                            padding: const EdgeInsets.all(16),
+                          ),
+                          child: loading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : Text(registering ? 'CADASTRAR' : 'ENTRAR'),
+                        ),
+                        TextButton(
+                          onPressed: loading
+                              ? null
+                              : () => setState(
+                                  () => registering = !registering,
+                                ),
+                          child: Text(
+                            registering
+                                ? 'Já tenho uma conta. Entrar'
+                                : 'Ainda não tenho conta. Cadastrar',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'NEXUS BANK • Acesso seguro',
+                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BankHome extends StatefulWidget {
+  final Api api;
+  final String userName;
+
+  const BankHome({
+    super.key,
+    required this.api,
+    required this.userName,
+  });
+
+  @override
+  State<BankHome> createState() => _BankHomeState();
+}
+
+class _BankHomeState extends State<BankHome> {
+  int tab = 0;
+  bool loading = true;
+  bool busy = false;
+  String? error;
+  double balance = 0;
+  String bannerText = '';
+  List<dynamic> history = [];
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        widget.api.wallet(),
+        widget.api.transactions(),
+      ]);
+
+      final wallet = results[0] as Map<String, dynamic>;
+      final transactions = results[1] as List<dynamic>;
+
+      final rawBalance = wallet['saldo'] ??
+          wallet['balance'] ??
+          wallet['saldoDisponivel'] ??
+          0;
+
+      final newBalance = rawBalance is num
+          ? rawBalance.toDouble()
+          : double.tryParse(rawBalance.toString()) ?? 0;
+
+      if (!mounted) return;
+
+      setState(() {
+        balance = newBalance;
+        history = transactions;
+        bannerText = wallet['mensagem']?.toString() ?? '';
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        error = e.toString().replaceFirst('Exception: ', '');
+        loading = false;
+      });
+    }
+  }
+
+  Future<void> reward() async {
+    setState(() => busy = true);
+    try {
+      final result = await widget.api.claimReward();
+      if (!mounted) return;
+
+      showMessage(
+        context,
+        result['mensagem']?.toString() ??
+            result['message']?.toString() ??
+            'Solicitação processada pelo servidor.',
+      );
+      await refresh();
+    } catch (e) {
+      if (mounted) {
+        showMessage(
+          context,
+          e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  void logout() {
+    widget.api.logout();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthPage()),
+      (_) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      dashboard(),
+      HistoryPage(items: history),
+      const AssistantPage(),
+      const HelpPage(),
+      if (widget.api.isAdmin) const AdminPage(),
+    ];
+
+    final destinations = <NavigationDestination>[
+      const NavigationDestination(
+        icon: Icon(Icons.account_balance_wallet_outlined),
+        selectedIcon: Icon(Icons.account_balance_wallet),
+        label: 'Carteira',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.receipt_long),
+        label: 'Histórico',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.smart_toy_outlined),
+        label: 'Assistente',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.help_outline),
+        label: 'Ajuda',
+      ),
+      if (widget.api.isAdmin)
+        const NavigationDestination(
+          icon: Icon(Icons.admin_panel_settings_outlined),
+          label: 'Admin',
+        ),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'NEXUS BANK',
+          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5),
+        ),
+        actions: [
+          IconButton(
+            onPressed: refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: logout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.cloud_off, size: 48),
+                        const SizedBox(height: 12),
+                        Text(error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: refresh,
+                          child: const Text('Tentar novamente'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : IndexedStack(
+                  index: tab,
+                  children: pages,
+                ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tab,
+        onDestinationSelected: (value) => setState(() => tab = value),
+        destinations: destinations,
+      ),
+    );
+  }
+
+  Widget dashboard() {
+    return RefreshIndicator(
+      onRefresh: refresh,
+      child: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Text(
+            'Olá, ${widget.userName}',
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+              color: darkPurple,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text('Que bom ter você por aqui.'),
+          if (bannerText.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Card(child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(bannerText),
+            )),
+          ],
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(23),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [darkPurple, purple, Color(0xFF9B68ED)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: purple.withValues(alpha: 0.22),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet, color: Colors.white70),
+                    SizedBox(width: 8),
+                    Text(
+                      'SALDO VIRTUAL DISPONÍVEL',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Text(
+                  money(balance),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Valor informado pelo servidor.',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: busy ? null : reward,
+            icon: const Icon(Icons.card_giftcard),
+            label: Text(
+              busy ? 'Processando...' : 'Consultar recompensa',
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.all(15),
+              backgroundColor: purple,
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => showMessage(
+              context,
+              'Saques Pix ainda não estão habilitados nesta versão.',
+            ),
+            icon: const Icon(Icons.pix),
+            label: const Text('Saques Pix — em preparação'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(15),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(
+                backgroundColor:
 class HelpPage extends StatelessWidget {
   const HelpPage({super.key});
   @override

@@ -1,12 +1,12 @@
+
 name: Gerar APK Android
 
 on:
   workflow_dispatch:
-  push:    paths:
+  push:
+    paths:
       - 'flutter_app/**'
       - '.github/workflows/build.yml'
-    paths:
-      run: cd flutter_app && flutter build apk --release
 
 jobs:
   build:
@@ -31,6 +31,10 @@ jobs:
         working-directory: flutter_app
         run: flutter pub get
 
+      - name: Verificar código
+        working-directory: flutter_app
+        run: flutter analyze
+
       - name: Gerar APK
         working-directory: flutter_app
         run: flutter build apk --release
@@ -38,5 +42,6 @@ jobs:
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: aplicativo-android
+          name: nexus-bank-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

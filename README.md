@@ -1,4 +1,5 @@
-# Projeto Carteira + Assistente IA
+                       NEXUS 
+                        BANK
 
 Projeto inicial integrado, organizado para trabalhar pelo celular e compilar APK em nuvem.
 

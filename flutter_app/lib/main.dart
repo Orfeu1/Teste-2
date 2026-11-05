@@ -403,7 +403,7 @@ class _AuthPageState extends State<AuthPage> {
                       gradient: const LinearGradient(
                         colors: [Color(0xFF8C62F0), Color(0xFF5631B5)],
                       ),
-                      borderRadius: BorderRadius.circular(27),😮‍💨😮‍💨😮‍💨🙂
+                      borderRadius: BorderRadius.circular(27),
                       boxShadow: [
                         BoxShadow(
                     color: const Color(0xFF7046D8).withValues(alpha: 0.25),
@@ -417,17 +417,20 @@ class _AuthPageState extends State<AuthPage> {
                       size: 45,
                     ),
                   ),
-                  color: const Color(0xFF7046D8).withValues(alpha: 0.25),
-                  
-                    'NEXUS BANK',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 29,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      color: Color(0xFF30204F),
-                    ),
-                  ),
+                  decoration: BoxDecoration(
+  gradient: const LinearGradient(
+    colors: [Color(0xFF8C62F0), Color(0xFF5631B5)],
+  ),
+  borderRadius: BorderRadius.circular(27),
+  boxShadow: [
+    BoxShadow(
+      color: const Color(0xFF7046D8).withValues(alpha: 0.25),
+      blurRadius: 25,
+      offset: const Offset(0, 12),
+    ),
+  ],
+),
+              
                   const SizedBox(height: 7),
                   const Text(
                     'Sua carteira virtual, em um só lugar.',
@@ -495,7 +498,7 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                     child: loading
-                        ? const SizedBox(😡😡😡😡😡
+                        ? const SizedBox(
                             height: 22,
                             width: 22,
                             child: CircularProgressIndicator(

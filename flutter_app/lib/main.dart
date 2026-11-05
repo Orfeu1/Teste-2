@@ -710,7 +710,7 @@ class DashboardPage extends StatelessWidget {
     super.key,
     required this.name,
     required this.balance,
-    required this.history,😮‍💨😮‍💨😮‍💨😮‍💨
+    required this.history,
     required this.config,
     required this.loading,
     required this.onRefresh,
@@ -762,7 +762,7 @@ class DashboardPage extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF7046D8).withOpacity(.22),
+                  withOpacity.
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),

@@ -418,8 +418,8 @@ class _AuthPageState extends State<AuthPage> {
                       size: 45,
                     ),
                   ),
-                  withOpacity.
-                  const Text(
+                  color: const Color(0xFF7046D8).withValues(alpha: 0.25),
+                  
                     'NEXUS BANK',
                     textAlign: TextAlign.center,
                     style: TextStyle(
@@ -444,7 +444,7 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(🤨🤨🤨🤨🤨
+                  Text(
                     registering
                         ? 'Preencha os dados para começar.'
                         : 'Entre para acessar sua carteira virtual.',

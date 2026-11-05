@@ -406,7 +406,7 @@ class _AuthPageState extends State<AuthPage> {
                       borderRadius: BorderRadius.circular(27),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF7046D8).withOpacity(.25),
+                          withOpacity
                           blurRadius: 25,
                           offset: const Offset(0, 12),
                         ),

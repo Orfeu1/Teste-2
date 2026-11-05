@@ -418,7 +418,7 @@ class _AuthPageState extends State<AuthPage> {
                       size: 45,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  withOpacity.
                   const Text(
                     'NEXUS BANK',
                     textAlign: TextAlign.center,

@@ -776,7 +776,7 @@ class DashboardPage extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
-                  ),
+                  ),😮‍💨
                 ),
                 const SizedBox(height: 22),
                 const Text(

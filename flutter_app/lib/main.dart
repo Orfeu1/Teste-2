@@ -360,7 +360,7 @@ class _AuthPageState extends State<AuthPage> {
         await NexusApi.instance.register(
           _name.text.trim(),
           email,
-          password,😌
+          password,
         );
 
         if (NexusApi.instance.token == null) {
@@ -710,7 +710,7 @@ class DashboardPage extends StatelessWidget {
     super.key,
     required this.name,
     required this.balance,
-    required this.history,
+    required this.history,😮‍💨😮‍💨😮‍💨😮‍💨
     required this.config,
     required this.loading,
     required this.onRefresh,

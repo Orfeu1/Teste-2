@@ -1,4 +1,4 @@
-import 'dart:async';
+umimport 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -444,7 +444,7 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  Text(🤨🤨🤨🤨🤨
                     registering
                         ? 'Preencha os dados para começar.'
                         : 'Entre para acessar sua carteira virtual.',

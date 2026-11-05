@@ -406,13 +406,12 @@ class _AuthPageState extends State<AuthPage> {
                       borderRadius: BorderRadius.circular(27),
                       boxShadow: [
                         BoxShadow(
-                          withOpacity
-                          blurRadius: 25,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(🤨🤨🤨🤨
+                    color: const Color(0xFF7046D8).withValues(alpha: 0.25),
+                    blurRadius: 25,
+                    offset: const Offset(0, 12),
+                  ),
+                                                                                           ],
+                    child: const Icon(
                       Icons.account_balance_rounded,
                       color: Colors.white,
                       size: 45,

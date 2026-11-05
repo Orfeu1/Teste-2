@@ -326,7 +326,7 @@ class _AuthPageState extends State<AuthPage> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
-    super.dispose();😮‍💨😮‍💨😮‍💨😮‍💨😮‍💨
+    super.dispose();
   }
 
   void message(String value) {
@@ -412,7 +412,7 @@ class _AuthPageState extends State<AuthPage> {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: const Icon(🤨🤨🤨🤨
                       Icons.account_balance_rounded,
                       color: Colors.white,
                       size: 45,

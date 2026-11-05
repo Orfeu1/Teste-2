@@ -403,7 +403,7 @@ class _AuthPageState extends State<AuthPage> {
                       gradient: const LinearGradient(
                         colors: [Color(0xFF8C62F0), Color(0xFF5631B5)],
                       ),
-                      borderRadius: BorderRadius.circular(27),
+                      borderRadius: BorderRadius.circular(27),😮‍💨😮‍💨😮‍💨🙂
                       boxShadow: [
                         BoxShadow(
                     color: const Color(0xFF7046D8).withValues(alpha: 0.25),

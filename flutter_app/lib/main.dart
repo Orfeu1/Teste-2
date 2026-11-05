@@ -326,7 +326,7 @@ class _AuthPageState extends State<AuthPage> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
-    super.dispose();
+    super.dispose();😮‍💨😮‍💨😮‍💨😮‍💨😮‍💨
   }
 
   void message(String value) {

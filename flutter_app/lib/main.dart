@@ -496,7 +496,7 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                     child: loading
-                        ? const SizedBox(
+                        ? const SizedBox(😡😡😡😡😡
                             height: 22,
                             width: 22,
                             child: CircularProgressIndicator(
@@ -709,7 +709,7 @@ class DashboardPage extends StatelessWidget {
   const DashboardPage({
     super.key,
     required this.name,
-    required this.balance,
+    required this.balance,😡😡😡😡
     required this.history,
     required this.config,
     required this.loading,
